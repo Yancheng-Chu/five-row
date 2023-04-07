@@ -1,4 +1,4 @@
-FROM node:12-slim
+FROM node:16-slim
 WORKDIR /Users/sf.com/Downloads/Server
 COPY package*.json ./
 RUN npm install --only=production
