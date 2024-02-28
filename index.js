@@ -1,39 +1,192 @@
 const express = require('express');
 const app = express();
-
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
-
-const port = 1919;
-const ctf = require("./routes/ctf");
+const { Server } = require("socket.io")
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors());
 
 
-const url = "mongodb+srv://char:aa123456@cluster0.6dxh1s5.mongodb.net/ctf?retryWrites=true&w=majority"
+var server = require('http').createServer(app)
+
+const { room } = require("./models/chess");
+
+const port = 1919;
+const chess = require("./routes/chess");
+
+
+const url = "mongodb+srv://char:aa123456@cluster0.6dxh1s5.mongodb.net/web?retryWrites=true&w=majority"
 
 mongoose.connect(url, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true 
-  })
-.then(() => {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+  .then(() => {
     console.log("Connected Successfully")
-})
-.catch((err) => {
-    console.log("Connected Failed",err)
-})
+  })
+  .catch((err) => {
+    console.log("Connected Failed", err)
+  })
 
 
-app.use("/ctf", ctf);
+app.use("/chess", chess);
 
-app.listen(port, function () {
+
+
+
+const io = new Server(server, {
+  cors: {
+    origin: '*'
+  }
+});
+
+
+io.on("connection", async (socket) => {
+
+  console.log("New " + socket.id);
+
+  socket.on('login', (data) => {
+    console.log('login', 'Welcome' + data + 'Connect')
+  })
+
+
+
+  const rooms = {}
+
+  socket.on('disconnect', function () {
+    console.log(`User disconnected: ${socket.id}`);
+
+    for (const roomss in rooms) {
+      const index = rooms[roomss].indexOf(socket.id);
+      if (index !== -1) {
+        rooms[roomss].splice(index, 1);
+
+        socket.broadcast.to(roomss).emit('userLeft', socket.id);
+
+        if (rooms[roomss].length === 0) {
+          delete rooms[roomss];
+        }
+      }
+    }
+  });
+
+
+  socket.on('joinRoom', async (roomss, users, _id) => {
+    try {
+      const result = await room.findByIdAndUpdate(_id,
+        {
+          users
+        });
+
+
+    } catch (err) {
+      console.error('Error updating data:', err);
+      socket.emit('dataUpdateError', err);
+    }
+    socket.join(roomss)
+    if (!rooms[roomss]) {
+      rooms[roomss] = []
+    }
+    rooms[roomss].push(socket.id)
+    socket.broadcast.to(roomss).emit('newM', { msg: 'Someone Entered' })
+
+  })
+
+
+
+  socket.on('sendMessage', async (rooms, message) => {
+
+    socket.broadcast.to(rooms).emit('message', socket.id, message);
+
+  });
+
+
+  socket.on('updateData', async (_id, token) => {
+
+    try {
+      const result = await room.findByIdAndUpdate(_id,
+        {
+          token
+        });
+
+      socket.broadcast.emit('updated', token)
+    } catch (err) {
+      console.error('Error updating data:', err);
+
+      socket.emit('dataUpdateError', err);
+    }
+  });
+
+  socket.on('uuu', async (_id, board, player, black, white, lastX, lastY, over, results) => {
+
+    try {
+      const result = await room.findByIdAndUpdate(_id,
+        {
+          board, player, black, white, lastX, lastY, over, results
+        });
+
+    } catch (err) {
+      console.error('Error updating data:', err);
+
+      socket.emit('dataUpdateError', err);
+    }
+  });
+
+  socket.on('total', async (_id, total) => {
+
+    try {
+      const result = await room.findByIdAndUpdate(_id,
+        {
+          total
+        });
+
+    } catch (err) {
+      console.error('Error updating data:', err);
+
+      socket.emit('dataUpdateError', err);
+    }
+  });
+
+  socket.on('chosen', async (_id, chosen) => {
+
+    try {
+      const result = await room.findByIdAndUpdate(_id,
+        {
+          chosen
+        });
+
+    } catch (err) {
+      console.error('Error updating data:', err);
+
+      socket.emit('dataUpdateError', err);
+    }
+  });
+
+  socket.on('draw', async (req) => {
+    const { player, lastX, lastY, results, over, board, white, black, restore } = req;
+
+    socket.broadcast.emit('drawU', req);
+
+  });
+
+  socket.on('restores', async (restore) => {
+
+    socket.broadcast.emit('res', restore);
+
+
+  });
+
+});
+
+
+
+server.listen(port, function () {
   console.log("Runnning on " + port);
 });
 
-module.exports = app;
 
 
 
@@ -54,131 +207,3 @@ module.exports = app;
 
 
 
-
-// const {login,profile} = require('./models/customer');
-// const {slogin} = require('./selller');
-// const ObjectId = require('mongodb').ObjectId
-
-// app.use(express.urlencoded({extended: true}))
-// app.use(express.json());
-
-// app.get('/api',async (req,res) =>{
-//     res.send("Success!");
-// })
-
-// app.post('/profile',async (req,res) =>{
-//     try{
-//         const result = await profile.create(req.body)
-//         res.send(result._id)
-//         // res.send("profileed Success!");
-//         // const result = await profile.insertMany(req.body)
-//         // res.send(result[0]._id);
-//     }catch(err){
-//         res.send("profileed Failed!", err);
-//     }
-// })
-
-// app.get('/getOrders',async (req,res) =>{
-//     const {_id} = req.query
-//     // await profile.findOne({
-//     //     _id : new ObjectId(_id)
-//     // }, function(err,doc){
-//     //     if(doc){
-//     //         return res.json({
-//     //             code:0,
-//     //             msg:"Success",
-//     //             data:doc
-//     //         })
-//     //     }else{
-//     //         return res.json({
-//     //             code:-1,
-//     //             msg:"Fail",
-//     //             data:err.message
-//     //         })
-//     //     }
-//     // });
-//     const result = await profile.findOne({
-//         _id : new ObjectId(_id)
-//     });
-//     res.send(result)
-// })
-
-// app.post('/orderEdit',async (req,res) =>{
-//     try{
-//         const {_id,person,budget,diy_on,e_date,date,meal,space,entertainment} = req.body
-//         await profile.findByIdAndUpdate(_id,{
-//             person,budget,diy_on,e_date,date,meal,space,entertainment
-//         })
-//         res.send("Edited Success!");
-//     }catch(err){
-//         res.send("Edited Failed!", err);
-//     }
-// })
-
-// app.post('/orderCancel',async (req,res) =>{
-//     try{
-//         const {_id,status} = req.body
-//         await profile.findByIdAndUpdate(_id,{
-//             status:'已取消'
-//         })
-//         res.send("Edited Success!");
-//     }catch(err){
-//         res.send("Edited Failed!", err);
-//     }
-// })
-
-// app.get('/userOrders',async (req,res) =>{
-//     const {_openid} = req.query
-//     const result = await profile.find({
-//         _openid
-//     });
-//     res.send(result)
-// })
-
-// app.get('/allOrders',async (req,res) =>{
-//     try{
-//         const result = await profile.find({
-//             status:'发布中'
-//         });
-//         res.send(result)
-//     }catch(err){
-//         res.status(500).send({
-//             message:"allOrders Server Failed"
-//         })
-//     }
-// })
-
-// app.get('/seller',async (req,res) =>{
-//     console.log(req.query)
-//     const {_openid} = req.query
-//     const result = await slogin.find({
-//         _openid
-//     });
-//     res.send(result)
-// })
-
-// app.post('/slogin',async (req,res) =>{
-//     try{
-//         const result = await slogin.create(req.body)
-//         res.send(result._id)
-//     }catch(err){
-//         res.send("profileed Failed!", err);
-//     }
-// })
-
-// app.post('/sClass',async (req,res) =>{
-//     console.log(req.body)
-//     try{
-//         const {_id,check,list} = req.body
-//         await slogin.findByIdAndUpdate(_id,{
-//             check,list
-//         })
-//         res.send("Edited Success!");
-//     }catch(err){
-//         res.send("Edited Failed!", err);
-//     }
-// })
-
-// app.listen(27017,() =>{
-//     console.log('Running Port 27017');
-// })
